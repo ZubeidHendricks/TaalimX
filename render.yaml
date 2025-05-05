@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: taalimx-api
+    env: node
+    region: oregon
+    plan: starter
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        sync: false  # Set this manually in Render dashboard
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        value: https://your-vercel-app.vercel.app
+      - key: STRIPE_SECRET_KEY
+        sync: false  # Set this manually in Render dashboard
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false  # Set this manually in Render dashboard
