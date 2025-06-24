@@ -211,12 +211,13 @@ export default function BookClass() {
       const [startTime, endTime] = bookingDetails.timeSlot.split('|')
 
       // Create class
-      await axios.post(
+      const classResponse = await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/api/classes`,
         {
           teacherId: bookingDetails.teacherId,
           studentId: bookingDetails.studentId,
           subject: bookingDetails.subject,
+          scheduledDate: bookingDetails.date,
           startTime,
           endTime,
           pricePerLesson: bookingDetails.price
@@ -226,17 +227,24 @@ export default function BookClass() {
         }
       )
       
-      // Process payment
-      // This would typically redirect to a Stripe payment page
-      // For now, we'll just show a success message
-
-      toast({
-        title: 'Success',
-        description: 'Class booked successfully!',
-      })
-
-      // Redirect to classes view
-      router.push('/parent/classes')
+      // Store class ID for payment
+      localStorage.setItem('pendingClassId', classResponse.data.id.toString())
+      
+      // Create PayPal payment order
+      const orderResponse = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/payments/create-payment-order`,
+        { classId: classResponse.data.id },
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      )
+      
+      if (orderResponse.data.approvalUrl) {
+        // Redirect to PayPal for payment approval
+        window.location.href = orderResponse.data.approvalUrl
+      } else {
+        throw new Error('Failed to create PayPal payment order')
+      }
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -525,7 +533,7 @@ export default function BookClass() {
                       <p className="font-bold text-lg">R{bookingDetails.price}</p>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Payment will be processed upon booking
+                      Secure payment via PayPal
                     </p>
                   </div>
 
@@ -539,7 +547,7 @@ export default function BookClass() {
                       !bookingDetails.timeSlot
                     }
                   >
-                    {bookingInProgress ? 'Processing...' : 'Book Class & Pay'}
+                    {bookingInProgress ? 'Processing...' : 'Book Class & Pay with PayPal'}
                   </Button>
                 </>
               ) : (

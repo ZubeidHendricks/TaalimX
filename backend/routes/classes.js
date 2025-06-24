@@ -382,7 +382,7 @@ router.post('/:classId/complete', auth, authorize('teacher'), async (req, res) =
       await client.query(
         `INSERT INTO payments (teacher_id, class_id, amount, payment_method, status)
          VALUES ($1, $2, $3, $4, $5)`,
-        [classData.teacher_id, classId, classData.price_per_lesson, 'stripe', 'pending']
+        [classData.teacher_id, classId, classData.price_per_lesson, 'paypal', 'pending']
       );
 
       return classData;

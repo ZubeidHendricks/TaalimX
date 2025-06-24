@@ -7,6 +7,7 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "migrate": "node db/migrate.js",
+    "migrate:paypal": "node scripts/migrate-paypal.js",
     "test": "jest",
     "lint": "eslint ."
   },
@@ -19,7 +20,7 @@
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
-    "stripe": "^14.11.0",
+    "@paypal/paypal-server-sdk": "^1.0.0",
     "joi": "^17.11.0",
     "helmet": "^7.1.0",
     "express-rate-limit": "^7.1.5",
