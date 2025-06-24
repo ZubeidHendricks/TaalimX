@@ -15,17 +15,15 @@ const router = express.Router();
 // PayPal SDK setup
 const paypal = require('@paypal/paypal-server-sdk');
 
-const environment = process.env.NODE_ENV === 'production' 
-  ? new paypal.core.LiveEnvironment(process.env.PAYPAL_CLIENT_ID, process.env.PAYPAL_CLIENT_SECRET)
-  : new paypal.core.SandboxEnvironment(process.env.PAYPAL_CLIENT_ID, process.env.PAYPAL_CLIENT_SECRET);
-
-const client = new paypal.core.PayPalHttpClient(environment);
+const client = new paypal.PayPalApi({
+  environment: process.env.NODE_ENV === 'production' ? paypal.Environment.Live : paypal.Environment.Sandbox,
+  clientId: process.env.PAYPAL_CLIENT_ID,
+  clientSecret: process.env.PAYPAL_CLIENT_SECRET,
+});
 
 // Helper function to create PayPal order
 const createPayPalOrder = async (amount, classId, metadata) => {
-  const request = new paypal.orders.OrdersCreateRequest();
-  request.prefer("return=representation");
-  request.requestBody({
+  const orderRequest = {
     intent: 'CAPTURE',
     purchase_units: [{
       reference_id: `class_${classId}`,
@@ -45,13 +43,17 @@ const createPayPalOrder = async (amount, classId, metadata) => {
       return_url: `${process.env.FRONTEND_URL}/parent/payment-success?class_id=${classId}`,
       cancel_url: `${process.env.FRONTEND_URL}/parent/payment-cancelled?class_id=${classId}`
     }
-  });
+  };
 
   try {
-    const order = await client.execute(request);
+    const { body: order } = await client.ordersController.ordersCreate({
+      body: orderRequest,
+      prefer: 'return=representation'
+    });
+    
     return {
-      orderId: order.result.id,
-      approvalUrl: order.result.links.find(link => link.rel === 'approve').href
+      orderId: order.id,
+      approvalUrl: order.links.find(link => link.rel === 'approve').href
     };
   } catch (error) {
     console.error('PayPal order creation error:', error);
@@ -215,18 +217,18 @@ router.post('/capture-payment', auth, authorize('parent'), async (req, res) => {
     }
 
     // Capture the order
-    const request = new paypal.orders.OrdersCaptureRequest(orderId);
-    request.requestBody({});
+    const { body: capture } = await client.ordersController.ordersCapture({
+      id: orderId,
+      body: {}
+    });
 
-    const capture = await client.execute(request);
-
-    if (capture.result.status === 'COMPLETED') {
+    if (capture.status === 'COMPLETED') {
       // Update payment status
       await query(
         `UPDATE payments 
          SET status = 'completed', paypal_payment_id = $1, payment_date = NOW(), updated_at = NOW()
          WHERE paypal_order_id = $2`,
-        [capture.result.id, orderId]
+        [capture.id, orderId]
       );
 
       // Update class status to confirmed
@@ -239,7 +241,7 @@ router.post('/capture-payment', auth, authorize('parent'), async (req, res) => {
 
       res.json({
         success: true,
-        paymentId: capture.result.id,
+        paymentId: capture.id,
         status: 'completed',
         message: 'Payment captured successfully'
       });
@@ -247,7 +249,7 @@ router.post('/capture-payment', auth, authorize('parent'), async (req, res) => {
       res.status(400).json({ 
         error: 'Payment capture failed',
         code: 'CAPTURE_FAILED',
-        status: capture.result.status
+        status: capture.status
       });
     }
 
