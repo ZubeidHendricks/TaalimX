@@ -264,7 +264,7 @@ export default function ParentDashboard() {
                     {getRecitationLevelBadge(student.arabic_recitation_level)}
                   </CardTitle>
                   <CardDescription>
-                    Age: {format(new Date(), 'yyyy') - format(new Date(student.date_of_birth), 'yyyy')} years
+                    Age: {new Date().getFullYear() - new Date(student.date_of_birth).getFullYear()} years
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
