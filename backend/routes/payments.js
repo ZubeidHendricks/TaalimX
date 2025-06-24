@@ -13,12 +13,14 @@ const {
 const router = express.Router();
 
 // PayPal SDK setup
-const paypal = require('@paypal/paypal-server-sdk');
+const { Client, Environment } = require('@paypal/paypal-server-sdk');
 
-const client = new paypal.PayPalApi({
-  environment: process.env.NODE_ENV === 'production' ? paypal.Environment.Live : paypal.Environment.Sandbox,
-  clientId: process.env.PAYPAL_CLIENT_ID,
-  clientSecret: process.env.PAYPAL_CLIENT_SECRET,
+const client = new Client({
+  environment: process.env.NODE_ENV === 'production' ? Environment.Production : Environment.Sandbox,
+  clientCredentialsAuthCredentials: {
+    oAuthClientId: process.env.PAYPAL_CLIENT_ID,
+    oAuthClientSecret: process.env.PAYPAL_CLIENT_SECRET,
+  },
 });
 
 // Helper function to create PayPal order
@@ -46,7 +48,7 @@ const createPayPalOrder = async (amount, classId, metadata) => {
   };
 
   try {
-    const { body: order } = await client.ordersController.ordersCreate({
+    const { body: order } = await client.orders.ordersCreate({
       body: orderRequest,
       prefer: 'return=representation'
     });
@@ -217,7 +219,7 @@ router.post('/capture-payment', auth, authorize('parent'), async (req, res) => {
     }
 
     // Capture the order
-    const { body: capture } = await client.ordersController.ordersCapture({
+    const { body: capture } = await client.orders.ordersCapture({
       id: orderId,
       body: {}
     });
