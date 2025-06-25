@@ -1,0 +1,15 @@
+# Ignore backend directory - deploy only frontend to Vercel
+backend/
+backend/**
+
+# Ignore other non-frontend files
+*.md
+.env*
+.deploy-trigger
+DEPLOY_STATUS.md
+
+# Keep frontend
+!frontend/
+!frontend/**
+!vercel.json
+!package.json
