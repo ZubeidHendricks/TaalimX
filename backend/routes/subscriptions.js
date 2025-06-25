@@ -1,16 +1,18 @@
 const express = require('express');
-const paypal = require('@paypal/paypal-server-sdk');
+const { Client, Environment } = require('@paypal/paypal-server-sdk');
 const { query, transaction } = require('../db');
 const { auth, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
 // PayPal client setup
-const environment = process.env.NODE_ENV === 'production' 
-  ? new paypal.core.LiveEnvironment(process.env.PAYPAL_CLIENT_ID, process.env.PAYPAL_CLIENT_SECRET)
-  : new paypal.core.SandboxEnvironment(process.env.PAYPAL_CLIENT_ID, process.env.PAYPAL_CLIENT_SECRET);
-
-const client = new paypal.core.PayPalHttpClient(environment);
+const client = new Client({
+  environment: process.env.NODE_ENV === 'production' ? Environment.Production : Environment.Sandbox,
+  clientCredentialsAuthCredentials: {
+    oAuthClientId: process.env.PAYPAL_CLIENT_ID,
+    oAuthClientSecret: process.env.PAYPAL_CLIENT_SECRET,
+  },
+});
 
 // Create PayPal subscription plan
 router.post('/create-plan', auth, authorize('teacher'), async (req, res) => {
@@ -34,21 +36,21 @@ router.post('/create-plan', auth, authorize('teacher'), async (req, res) => {
     const teacherId = teacherResult.rows[0].id;
 
     // Create PayPal product
-    const productRequest = new paypal.catalogs.ProductsCreateRequest();
-    productRequest.requestBody({
+    const productRequest = {
       name: `${name} - TaalimX Classes`,
       description: description,
       type: 'SERVICE',
       category: 'EDUCATIONAL',
       home_url: process.env.FRONTEND_URL
+    };
+
+    const { body: product } = await client.catalog.productsCreate({
+      body: productRequest
     });
 
-    const product = await client.execute(productRequest);
-
     // Create PayPal plan
-    const planRequest = new paypal.subscriptions.PlansCreateRequest();
-    planRequest.requestBody({
-      product_id: product.result.id,
+    const planRequest = {
+      product_id: product.id,
       name: name,
       description: description,
       status: 'ACTIVE',
@@ -76,21 +78,23 @@ router.post('/create-plan', auth, authorize('teacher'), async (req, res) => {
         setup_fee_failure_action: 'CONTINUE',
         payment_failure_threshold: 3
       }
-    });
+    };
 
-    const plan = await client.execute(planRequest);
+    const { body: plan } = await client.subscriptions.plansCreate({
+      body: planRequest
+    });
 
     // Store subscription plan in database
     const result = await query(
       `INSERT INTO subscription_plans (teacher_id, paypal_plan_id, paypal_product_id, name, description, price_per_lesson, frequency, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')
        RETURNING *`,
-      [teacherId, plan.result.id, product.result.id, name, description, pricePerLesson, frequency]
+      [teacherId, plan.id, product.id, name, description, pricePerLesson, frequency]
     );
 
     res.status(201).json({
       plan: result.rows[0],
-      paypalPlanId: plan.result.id
+      paypalPlanId: plan.id
     });
 
   } catch (error) {
@@ -142,8 +146,7 @@ router.post('/create-subscription', auth, authorize('parent'), async (req, res) 
     const plan = planResult.rows[0];
 
     // Create PayPal subscription
-    const subscriptionRequest = new paypal.subscriptions.SubscriptionsCreateRequest();
-    subscriptionRequest.requestBody({
+    const subscriptionRequest = {
       plan_id: plan.paypal_plan_id,
       start_time: startDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Start tomorrow if not specified
       subscriber: {
@@ -165,21 +168,23 @@ router.post('/create-subscription', auth, authorize('parent'), async (req, res) 
         cancel_url: `${process.env.FRONTEND_URL}/parent/subscriptions?status=cancelled`
       },
       custom_id: `student_${studentId}_plan_${planId}`
-    });
+    };
 
-    const subscription = await client.execute(subscriptionRequest);
+    const { body: subscription } = await client.subscriptions.subscriptionsCreate({
+      body: subscriptionRequest
+    });
 
     // Store subscription in database
     const result = await query(
       `INSERT INTO subscriptions (plan_id, student_id, parent_id, paypal_subscription_id, status, start_date)
        VALUES ($1, $2, $3, $4, 'pending', $5)
        RETURNING *`,
-      [planId, studentId, parentId, subscription.result.id, startDate || new Date(Date.now() + 24 * 60 * 60 * 1000)]
+      [planId, studentId, parentId, subscription.id, startDate || new Date(Date.now() + 24 * 60 * 60 * 1000)]
     );
 
     res.json({
       subscription: result.rows[0],
-      approvalUrl: subscription.result.links.find(link => link.rel === 'approve')?.href
+      approvalUrl: subscription.links.find(link => link.rel === 'approve')?.href
     });
 
   } catch (error) {
